@@ -1,0 +1,44 @@
+name: approve-agent-tools-with-atryum
+displayName: Approve agent tools with Atryum
+description: >-
+  Govern AI agents in financial services: Atryum intercepts every tool call
+  an agent makes and approves, denies, or escalates it to a human — enforcing
+  each agent's governance charter with an AI judge and a full audit trail.
+version: "0.1.0"
+image: https://raw.githubusercontent.com/rh-ai-quickstart/approve-agent-tools-with-atryum/main/docs/images/architecture.svg
+
+maintainer:
+  name: ValidMind
+  github: rh-ai-quickstart
+
+repository: https://github.com/rh-ai-quickstart/approve-agent-tools-with-atryum
+
+deployment:
+  scope: project
+  chart:
+    type: repo
+    path: chart/
+    branch: main
+
+  configurableValues:
+    - key: model.api_key
+      label: LLM API key
+      description: OpenAI or OpenAI-compatible API key (powers the AI-evaluation judge and the demo agents).
+      type: string
+      required: true
+    - key: model.name
+      label: Model name
+      description: Model used by the judge and the demo agents.
+      type: string
+      default: gpt-4o
+      required: false
+    - key: model.endpoint
+      label: Model endpoint
+      description: OpenAI-compatible base URL without /v1 (leave empty to use OpenAI).
+      type: string
+      required: false
+    - key: clusterDomain
+      label: Cluster apps domain
+      description: OpenShift apps wildcard domain for stable Route hosts (leave empty for auto-assigned hosts).
+      type: string
+      required: false

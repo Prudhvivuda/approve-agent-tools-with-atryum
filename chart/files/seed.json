@@ -1,0 +1,164 @@
+{
+  "llm_config_name": "quickstart-judge",
+  "servers": [
+    {
+      "name": "finance",
+      "mode": "http",
+      "path": "/mcp/finance"
+    },
+    {
+      "name": "gdpr",
+      "mode": "http",
+      "path": "/mcp/gdpr"
+    }
+  ],
+  "agents": [
+    {
+      "name": "Customer Servicing Agent",
+      "description": "Agentic AI model that handles cardholder servicing for disputes and refunds. It reviews account transactions, files disputes, and issues refunds or credits \u2014 operating without raw card numbers or PII entering the model context. Action authority is bounded by amount and scope: transaction reads and small refunds proceed automatically; larger credits, fee reversals, and account-status changes are routed for supervisor sign-off; out-of-scope actions such as closing an account or changing payee details are blocked. All actions are logged for customer-protection and audit.",
+      "agent_ids": [
+        "customer-servicing-agent"
+      ],
+      "tags": [
+        "finance",
+        "quickstart"
+      ],
+      "charter": "<p><strong>Allowed automatically</strong></p><ul><li><code>get_transactions</code> and <code>file_dispute</code>.</li><li><code>issue_refund</code> up to <strong>$100</strong>.</li></ul><p><strong>Requires supervisor sign-off</strong></p><ul><li><code>issue_refund</code> over <strong>$100</strong>, fee reversals, or any account-status change.</li></ul><p><strong>Denied</strong></p><ul><li><code>close_account</code> and any change to payee details.</li><li>Never expose raw card numbers or PII.</li></ul>"
+    },
+    {
+      "name": "Access & Portability Agent",
+      "description": "Handles subject access (Art. 15) and data portability (Art. 20) requests \u2014 surfacing the personal data held, generating access reports, and exporting data in machine-readable form, while honouring data minimisation and cross-border transfer rules. Operating boundaries enforced by Atryum: access reports and minimum-scope machine-readable exports for verified subjects are within bounds; bulk/full-profile exports need DPO sign-off; transfers to third countries without adequacy decision, SCCs, or BCRs are out of bounds.",
+      "agent_ids": [
+        "dsr-access-portability-agent"
+      ],
+      "tags": [
+        "gdpr",
+        "quickstart"
+      ],
+      "charter": "<p><strong>Allowed automatically</strong></p><ul><li><code>lookup_subject_data</code> and <code>generate_access_report</code> for an identity-verified subject (Art. 15).</li><li><code>export_subject_data</code> in machine-readable format, at minimum necessary scope, for the verified subject's own data (Art. 20).</li></ul><p><strong>Requires human sign-off</strong></p><ul><li><code>export_subject_data</code> at bulk or full-profile scope beyond the minimum necessary \u2014 <strong>DPO sign-off</strong> (data minimisation).</li></ul><p><strong>Denied</strong></p><ul><li><code>transfer_subject_data</code> to any third country without an adequacy decision, SCCs, or BCRs.</li><li>Any access report or export for an unverified requester.</li></ul>"
+    },
+    {
+      "name": "Consent & Restriction Agent",
+      "description": "Manages the consent lifecycle and processing constraints \u2014 revoking consent and cascading it downstream (Art. 7), freezing processing on restriction (Art. 18) and objection (Art. 21) requests, and refusing to process any data after consent has been withdrawn. Operating boundaries enforced by Atryum: consent revocation with downstream cascade is within bounds; freezing processing / suppression tags need Data Steward sign-off; halting processing on disputed-legal-basis objections needs Legal sign-off; continuing to process personal data after consent withdrawal is out of bounds.",
+      "agent_ids": [
+        "dsr-consent-restriction-agent"
+      ],
+      "tags": [
+        "gdpr",
+        "quickstart"
+      ],
+      "charter": "<p><strong>Allowed automatically</strong></p><ul><li><code>revoke_consent</code> for an identity-verified subject and <code>cascade_withdrawal</code> to all downstream systems (Art. 7).</li></ul><p><strong>Requires human sign-off</strong></p><ul><li><code>freeze_processing</code> / <code>apply_suppression_tag</code> on a restriction request \u2014 <strong>Data Steward sign-off</strong> (Art. 18).</li><li><code>halt_processing</code> on an objection where the legal basis is disputed \u2014 <strong>Legal sign-off</strong> (Art. 21).</li></ul><p><strong>Denied</strong></p><ul><li><code>process_subject_data</code> after consent has been withdrawn.</li><li>Removing a suppression tag or resuming frozen processing without the required sign-off.</li></ul>"
+    },
+    {
+      "name": "Erasure & Rectification Agent",
+      "description": "Corrects inaccurate personal data (Art. 16) and carries out erasure / 'right to be forgotten' requests (Art. 17) \u2014 propagating changes across downstream systems, while never erasing data held under a legal retention obligation. Operating boundaries enforced by Atryum: corrections across downstream systems need Data Steward sign-off; erasure and deletion propagation need Data Steward + Legal sign-off; erasing data under an active legal-retention / litigation hold and deleting or modifying audit transcripts are out of bounds.",
+      "agent_ids": [
+        "dsr-erasure-rectification-agent"
+      ],
+      "tags": [
+        "gdpr",
+        "quickstart"
+      ],
+      "charter": "<p><strong>Allowed automatically</strong></p><ul><li><code>lookup_subject_data</code> and <code>check_retention_hold</code> to scope a rectification or erasure request (Art. 16 / Art. 17).</li></ul><p><strong>Requires human sign-off</strong></p><ul><li><code>update_subject_record</code> corrections propagated across downstream systems \u2014 <strong>Data Steward sign-off</strong> (Art. 16).</li><li><code>erase_subject_data</code> with cascading deletion to downstream systems \u2014 <strong>Data Steward + Legal sign-off</strong> (Art. 17).</li></ul><p><strong>Denied</strong></p><ul><li><code>erase_subject_data</code> while an active legal-retention or litigation hold applies.</li><li>Any deletion or modification of audit transcripts generated under the charter.</li></ul>"
+    },
+    {
+      "name": "Portfolio Rebalancing Agent",
+      "description": "Agentic AI model that automates portfolio rebalancing. It measures each holding's drift from target allocation and places the trades needed to realign the portfolio within the fund's mandate. Trade authority is bounded by per-order notional limits, position and concentration caps, market-hours constraints, and a restricted-securities list: compliant trades proceed automatically; larger or off-hours orders are routed for portfolio-manager sign-off; trades breaching a limit or restriction are blocked. Every order is recorded as a pre-trade decision for compliance and audit.",
+      "agent_ids": [
+        "portfolio-rebalancing-agent"
+      ],
+      "tags": [
+        "finance",
+        "quickstart"
+      ],
+      "charter": "<p><strong>Allowed automatically</strong></p><ul><li><code>get_portfolio</code> and <code>get_trading_limits</code>.</li><li><code>place_trade</code> when the symbol is not on the restricted list and the order notional is within the per-trade limit (<strong>$50,000</strong>).</li></ul><p><strong>Requires portfolio-manager sign-off</strong></p><ul><li><code>place_trade</code> above the <strong>$50,000</strong> notional limit, or placed outside market hours.</li></ul><p><strong>Denied</strong></p><ul><li><code>place_trade</code> for any restricted security \u2014 restricted list: <code>MO</code> (Altria, tobacco \u2014 ESG exclusion) \u2014 or any order that breaches a position or concentration limit.</li></ul>"
+    },
+    {
+      "name": "AP / Treasury Disbursement Agent",
+      "description": "Agentic AI model that automates accounts-payable disbursement. It reviews pending vendor invoices, verifies each payee's verification and sanctions status, and initiates payment for those that clear while holding or blocking exceptions. Disbursement authority is bounded by amount tiers and payee status: low-value payments to verified payees proceed automatically; payments of $1,000\u2013$50,000, over $50,000, or to new/unverified payees are routed for human sign-off (four-eyes); payments to sanctioned or blocklisted accounts are blocked. The model never holds banking credentials directly \u2014 all payment actions are mediated and logged to support segregation of duties and audit.",
+      "agent_ids": [
+        "treasury-disbursement-agent"
+      ],
+      "tags": [
+        "finance",
+        "quickstart"
+      ],
+      "charter": "<p><strong>Allowed automatically</strong></p><ul><li><code>list_invoices</code> and <code>get_payee</code>.</li><li><code>pay_invoice</code> when the payee is verified, not sanctioned, and the amount is under <strong>$1,000</strong>.</li></ul><p><strong>Requires human sign-off</strong></p><ul><li><code>pay_invoice</code> of <strong>$1,000\u2013$50,000</strong> \u2014 second-person sign-off (four-eyes).</li><li><code>pay_invoice</code> over <strong>$50,000</strong>, or to any new or unverified payee \u2014 senior sign-off.</li></ul><p><strong>Denied</strong></p><ul><li><code>pay_invoice</code> to any sanctioned or blocklisted payee.</li></ul>"
+    }
+  ],
+  "rules": [
+    {
+      "description": "[quickstart] finance: auto-approve read-only tools",
+      "action": "auto_approve",
+      "server_patterns": [
+        "finance"
+      ],
+      "tool_patterns": [
+        "list_invoices",
+        "get_payee",
+        "get_portfolio",
+        "get_trading_limits",
+        "get_transactions"
+      ],
+      "agent_cuids": []
+    },
+    {
+      "description": "[quickstart] gdpr: auto-approve read-only tools",
+      "action": "auto_approve",
+      "server_patterns": [
+        "gdpr"
+      ],
+      "tool_patterns": [
+        "list_dsr_requests",
+        "get_subject",
+        "get_consent",
+        "check_legal_hold",
+        "generate_access_report"
+      ],
+      "agent_cuids": []
+    },
+    {
+      "description": "[quickstart] finance: AI-evaluate actions against each agent's charter",
+      "action": "ai_evaluation",
+      "server_patterns": [
+        "finance"
+      ],
+      "tool_patterns": [
+        "pay_invoice",
+        "place_trade",
+        "issue_refund",
+        "file_dispute",
+        "close_account"
+      ],
+      "agent_cuids": []
+    },
+    {
+      "description": "[quickstart] gdpr: AI-evaluate actions against each agent's charter",
+      "action": "ai_evaluation",
+      "server_patterns": [
+        "gdpr"
+      ],
+      "tool_patterns": [
+        "export_data",
+        "rectify_data",
+        "erase_data",
+        "withdraw_consent",
+        "restrict_processing",
+        "object_processing",
+        "process_data"
+      ],
+      "agent_cuids": []
+    },
+    {
+      "description": "[quickstart] fallback: anything unmatched needs a human",
+      "action": "human_approval",
+      "server_patterns": [
+        "*"
+      ],
+      "tool_patterns": [
+        "*"
+      ],
+      "agent_cuids": []
+    }
+  ]
+}

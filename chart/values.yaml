@@ -1,20 +1,85 @@
----
-# LLM configuration (optional)
-# Only needed if your quickstart requires a model.
+# LLM configuration (required)
 #
-# Option A: Bring your own model (MaaS - Model as a Service)
-# Uncomment and set these values to use an external model endpoint.
-# model:
-#   name: my-model
-#   endpoint: https://my-maas-instance:443    # full URL including protocol and port
-#   api_key: my-api-key
+# One credential powers both Atryum's AI-evaluation judge and the demo agents.
 #
-# Option B: Deploy a model with this chart
-# When model is not set (or empty), the chart can deploy a default model.
-# Add your own InferenceService template under templates/ for this.
-model: {}
+# Option A: OpenAI — set model.api_key (and optionally model.name), leave
+#           model.endpoint empty.
+# Option B: Bring your own OpenAI-compatible model (MaaS, vLLM, an OpenShift AI
+#           model server, …) — set name, endpoint, and api_key. The endpoint is
+#           the base URL without the /v1 suffix (e.g. https://my-maas-instance:443);
+#           a trailing /v1 is tolerated and stripped.
+model:
+  name: gpt-4o
+  endpoint: ""
+  api_key: ""
+  # Judge provider is derived from endpoint (openai / openai_compatible);
+  # set explicitly to override (e.g. "anthropic" — judge only, the demo
+  # agents always speak the OpenAI API).
+  provider: ""
 
-# -- Add your quickstart-specific values below --
-# app:
-#   replicas: 1
-#   image: quay.io/my-org/my-app:latest
+# OpenShift apps wildcard domain (e.g. apps.my-cluster.example.com).
+# The Makefile auto-detects it via:
+#   oc get ingresses.config/cluster -o jsonpath='{.spec.domain}'
+# When empty, Routes let OpenShift pick the host and Atryum's public_base_url
+# falls back to the in-cluster service URL (fine for the demo; OAuth-based MCP
+# servers would need a real public URL).
+clusterDomain: ""
+
+atryum:
+  image:
+    repository: validmind/atryum
+    tag: "latest"
+    pullPolicy: IfNotPresent
+  logLevel: info
+  # Override Atryum's public URL outright (takes precedence over clusterDomain).
+  publicBaseUrl: ""
+  route:
+    enabled: true
+    host: ""
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      memory: 512Mi
+
+postgres:
+  image: quay.io/sclorg/postgresql-16-c9s:latest
+  # Password is generated on first install and preserved across upgrades
+  # (helm lookup); set explicitly to pin it.
+  password: ""
+  user: atryum
+  database: atryum
+  storage:
+    size: 10Gi
+    storageClassName: ""
+  resources:
+    requests:
+      cpu: 250m
+      memory: 512Mi
+    limits:
+      memory: 1Gi
+
+# The packaged finance + GDPR demo (dashboard on 8000, MCP servers on 8001).
+demo:
+  enabled: true
+  image:
+    repository: validmind/atryum-finance-demo
+    tag: "latest"
+    pullPolicy: Always
+  route:
+    enabled: true
+    host: ""
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      memory: 512Mi
+
+# Post-install/post-upgrade Job that seeds Atryum with the demo MCP servers,
+# the six governed agents and their charters, the rule set, and the judge
+# LLM config — via Atryum's REST API.
+configure:
+  enabled: true
+  image: registry.access.redhat.com/ubi9/python-312:latest

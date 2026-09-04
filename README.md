@@ -1,36 +1,11 @@
-# [INSERT quickstart title here]
+# Approve or block AI agent tool calls with Atryum
 
-> **CONTRIBUTOR TODO: update title**
->
-> Replace the H1 title above with your quickstart title
->
-> **TITLE requirements:**
-> - MAX CHAR: 64
-> - Industry use case, e.g.: "Protect patient data with LLM guardrails"
->
-> _TITLE will be extracted for publication._
-
-[Add your short description here - max 160 characters]
-
-> **CONTRIBUTOR TODO: short description**
->
-> Add a SHORT DESCRIPTION of your use case between H1 title and the Table of Contents
->
-> **SHORT DESCRIPTION requirements:**
-> - MAX CHAR: 160
-> - Describe the INDUSTRY use case
->
-> _SHORT DESCRIPTION will be extracted for publication._
+Put a governance gateway between AI agents and their tools: every action is approved, denied, or escalated against each agent's charter, with full audit.
 
 ## Table of Contents
 
-> **CONTRIBUTOR TODO: update table of contents links**
->
-> This section is recommended for better navigation. The links below are examples - update them to match your actual README sections.
-
 - [Overview](#overview)
 - [Detailed description](#detailed-description)
-  - [See it in action](#see-it-in-action)
   - [Architecture diagrams](#architecture-diagrams)
 - [Requirements](#requirements)
   - [Minimum hardware requirements](#minimum-hardware-requirements)
@@ -40,6 +15,7 @@
   - [Prerequisites](#prerequisites)
   - [Installation](#installation)
   - [Validating the deployment](#validating-the-deployment)
+  - [Walkthrough](#walkthrough)
   - [Delete](#delete)
 - [Repository structure](#repository-structure)
 - [References](#references)
@@ -48,224 +24,97 @@
 
 ## Overview
 
-> **CONTRIBUTOR TODO: add overview**
->
-> Write 2-4 sentences that give a high-level summary of what this quickstart does.
->
-> **Focus on:**
-> - What problem does this solve?
-> - Who is this for? (e.g., "Healthcare providers managing patient data")
-> - What will users be able to do after deploying this?
->
-> Keep it non-technical - save technical details for later sections.
+Agents use *tools* to take action in the real world: paying invoices, placing trades, erasing customer data. [Atryum](https://atryum.org) intercepts every one of those tool calls **before it executes** and decides — automatically, via an AI judge, or by escalating to a human — whether it should be allowed. This quickstart deploys Atryum on OpenShift together with six demo agents from financial services and GDPR compliance, pre-seeded with governance charters and rules, so you can watch an agent get confused and see the gateway contain the damage.
 
 ## Detailed description
 
-> **CONTRIBUTOR TODO: add detailed description**
->
-> Write 2-3 paragraphs that expand on the overview.
->
-> **Include:**
-> - The business/industry problem in more detail
-> - How this quickstart addresses that problem
-> - Key features or capabilities users will gain
-> - Real-world scenarios where this would be used
->
-> This is about the USE CASE, not the technology. Don't explain how it works technically yet.
->
-> **Example:** "In healthcare settings, clinicians often need to quickly access patient information while ensuring HIPAA compliance. This quickstart demonstrates how AI can summarize patient records while maintaining strict data privacy through guardrails..."
+Financial institutions want the productivity of agentic AI — an accounts-payable agent that pays invoices, a portfolio agent that rebalances funds, a servicing agent that resolves disputes. The failure mode isn't a reckless agent; it's a helpful one. Picture a revenue-ops manager asking their assistant to "send the account summary to the customer": the agent over-collects to be thorough, attaches a broad export, and a permitted email quietly carries 1,200 other customers' records out the door. Nothing crashed. Policy documents and system prompts didn't stop it — the agent can ignore them, and nothing along the way inspected what the call actually carried.
 
+This quickstart demonstrates enforcement at the only place it cannot be bypassed: the tool boundary. Atryum sits inline between each agent and its tools, and every tool call is checked against policy *before it executes*. Two decision layers do the work: **static rules** — deterministic access-control lists that auto-approve, auto-deny, or forward each operation, resolving the easy calls in about a millisecond — and **AI evaluation**, where an independent LLM judge reads the call (arguments included) against that agent's *charter*, a plain-language constitution of what it may and may not do, returning a decision with its confidence and reasoning. Anything unmatched is held for a human: the call pauses, not the platform. Every decision lands in a durable audit log.
 
-### See it in action
-
-> **CONTRIBUTOR TODO: add demo links**
->
-> This section is RECOMMENDED but optional.
->
-> **Add links to:**
-> - Arcade interactive demos (preferred)
-> - YouTube/video walkthroughs
-> - Live demo instances (if available)
->
-> This helps users see the value before deploying. Many users don't have immediate access to deployment environments, so demos are crucial.
->
-> **Example:**
-> - [Try the interactive demo](https://arcade.example.com/your-demo)
-> - [Watch the 3-minute walkthrough](https://youtube.com/example)
+The included demo makes this concrete. Three finance agents (treasury disbursement, portfolio rebalancing, customer servicing) and three GDPR data-subject-rights agents run against mock backends. The agents are deliberately naive — they attempt every action and let the gateway decide. Across one run you'll see the full spectrum of outcomes: a $240 invoice to a verified payee is **auto-approved** by a static rule, a routine disbursement is **AI-approved** against the treasury charter, a large payment is held for **human approval**, and a payment to a sanctioned account — or an erasure request under legal hold — is **denied** with the judge's reasoning attached.
 
 ### Architecture diagrams
 
-> **CONTRIBUTOR TODO: add architecture diagram**
->
-> This section is REQUIRED.
->
-> **Include:**
-> - A clear architecture diagram showing components and data flow
-> - Put image files in `docs/images/` folder
-> - Use descriptive filenames (e.g., `architecture-overview.png`)
-> - Add alt text for accessibility
->
-> **Example:**
-> ```
-> ![Architecture diagram showing data flow from user input through LLM to output](docs/images/architecture-overview.png)
-> ```
->
-> Optionally add a brief explanation of the diagram below the image.
+![Architecture diagram: the user runs demo agents from a dashboard; the agents' tool calls flow through the Atryum gateway, which resolves each one via static rules, AI evaluation against the agent's charter, or human approval before it reaches the demo backends; a Helm post-install job seeds agents, charters, and rules, PostgreSQL stores the durable audit log, and one LLM endpoint powers both the judge and the agents](docs/images/architecture.svg)
 
+Atryum sits inline between the agents and the tools they call — every tool call is checked against policy before it executes, resolved by static rules or judged by an AI evaluation against the agent's charter, with human approval as the fallback. One Helm release deploys the whole loop: Atryum (with PostgreSQL for rules, charters, and the audit log), the demo agents container, and a post-install Job that seeds the MCP servers, the six agents with their charters, the rule tiers, and the judge's LLM configuration through Atryum's REST API. One user-supplied LLM credential powers both the judge and the demo agents.
 
 ## Requirements
 
-> _This section groups all prerequisites users need before deploying_
-
 ### Minimum hardware requirements
 
-> **CONTRIBUTOR TODO: add minimum hardware requirements**
->
-> This section is REQUIRED. Be SPECIFIC - don't say "GPU", say exactly which GPU.
->
-> **Include:**
-> - CPU: specify cores, requests, and limits
-> - Memory: specify GiB, requests, and limits  
-> - GPU: exact models (e.g., "NVIDIA A10, A100, L40S, or T4")
-> - Storage: if significant storage is needed
->
-> If your quickstart deploys a model, list the model's resource requirements separately.
->
-> **Example:**
->
-> **Application:**
-> - CPU: 2 vCPU (request) / 4 vCPU (limit)
-> - Memory: 4 GiB (request) / 8 GiB (limit)
->
-> **LLM (if deploying a model):**
-> - CPU: 4 vCPU (request) / 8 vCPU (limit)
-> - Memory: 16 GiB (request) / 32 GiB (limit)
-> - GPU: 1 NVIDIA GPU (A10, A100, L40S, T4, or similar)
->
-> > **Note**: If using MaaS (external model endpoint), GPU is not required.
+No GPU is required — the LLM is consumed as a service (OpenAI or any OpenAI-compatible endpoint).
+
+**Total for the quickstart (3 pods + a short-lived seed Job):**
+- CPU: 0.5 vCPU (requests) / ~2 vCPU burst
+- Memory: 1 GiB (requests) / 2 GiB (limits)
+- Storage: 10 GiB PersistentVolume (PostgreSQL)
 
 ### Minimum software requirements
 
-> **CONTRIBUTOR TODO: add minimum software requirements**
->
-> This section is REQUIRED. Be SPECIFIC about versions.
->
-> **Include:**
-> - OpenShift version (e.g., "OpenShift 4.14 or later")
-> - OpenShift AI version (e.g., "OpenShift AI 2.22 or later")
-> - Other platform dependencies (operators, services)
-> - Client tools (oc CLI, helm, etc.)
->
-> **BAD:** "Requires OpenShift AI"  
-> **GOOD:** "Tested with OpenShift AI 2.22-2.25 on OpenShift 4.14+"
+- OpenShift 4.14 or later (any cluster with the Route API and a default StorageClass)
+- No OpenShift AI dependency — optional: point `model.endpoint` at an OpenShift AI model server instead of OpenAI
+- `oc` CLI 4.14+, `helm` 3.12+, `make`
 
 ### Required user permissions
 
-> **CONTRIBUTOR TODO: add user permissions**
->
-> This section is REQUIRED. Be clear about what permissions are needed.
->
-> **Options:**
-> - Regular user with standard permissions (preferred!)
-> - Namespace admin
-> - Cluster admin (only if absolutely necessary - explain why)
->
-> **Example:**
->
-> This quickstart can be deployed by any user with:
-> - Permission to create projects/namespaces
-> - Permission to deploy applications via Helm
-> - No cluster admin access required
+Any user who can:
+- create a project/namespace (or be given one)
+- deploy applications via Helm (Deployments, Services, Secrets, ConfigMaps, Jobs, PVCs, Routes)
 
+No cluster admin access is required. (The Makefile auto-detects the cluster's apps domain via `oc get ingresses.config/cluster`, which most users can read; if not, Routes still work with auto-assigned hosts.)
 
 ## Deploy
 
-> _This section contains all deployment instructions_
-
 ### Prerequisites
 
-> **CONTRIBUTOR TODO: verify and update prerequisites**
->
-> List specific items users must have/do BEFORE running installation commands.
->
-> **Include:**
-> - Access to specific platforms/clusters
-> - CLI tools installed (with version requirements)
-> - Authentication/credentials needed
-> - Network access requirements
->
-> **Example:**
->
-> Before deploying, ensure you have:
-> - Access to a Red Hat OpenShift cluster with OpenShift AI 2.22+ installed
-> - `oc` CLI (version 4.14+) installed and authenticated
-> - `helm` CLI (version 3.12+) installed
-> - API key for your model endpoint (if using MaaS)
+Before deploying, ensure you have:
+- Access to an OpenShift cluster, with `oc` logged in
+- `helm` and `make` installed
+- An **LLM API key** — OpenAI, or any OpenAI-compatible endpoint (MaaS, vLLM, an OpenShift AI model server). One key powers both Atryum's AI-evaluation judge and the demo agents.
 
 ### Installation
 
-> **CONTRIBUTOR TODO: customize installation steps**
->
-> Provide STEP-BY-STEP instructions. Assume users have limited knowledge.
->
-> **Include:**
-> - Clear numbered steps
-> - Exact commands to run (users should be able to copy/paste)
-> - Explanation of what each major step does
-> - Any configuration choices users need to make
->
-> Test these steps yourself on a fresh environment to ensure they work!
->
-> **Key things to update:**
-> - Replace "my-quickstart" and "YOUR_QUICKSTART_NAME" with your actual names
-> - Add any additional --set flags specific to your quickstart
-> - If your quickstart requires a model, keep the model options section below
-> - If your quickstart does NOT require a model, remove the model options section below entirely
-
 1. Clone the repository:
 ```bash
-git clone https://github.com/rh-ai-quickstart/YOUR_QUICKSTART_NAME.git
-cd YOUR_QUICKSTART_NAME
+git clone https://github.com/rh-ai-quickstart/approve-agent-tools-with-atryum.git
+cd approve-agent-tools-with-atryum
 ```
 
-2. Create a new OpenShift project:
+2. Configure your LLM credential:
 ```bash
-PROJECT="my-quickstart"
+make env-init          # creates .env
+# edit .env: set MODEL_API_KEY (and MODEL_NAME/MODEL_ENDPOINT for non-OpenAI endpoints)
+```
+
+3. Install (creates the project, deploys Atryum + demo, seeds agents/charters/rules, prints the URLs):
+```bash
+make install
+```
+
+Defaults: project `atryum-quickstart`, release `quickstart` — override like `make install NAMESPACE=my-project`.
+
+<details>
+<summary>Prefer plain Helm? (what the Makefile runs)</summary>
+
+```bash
+PROJECT="atryum-quickstart"
 oc new-project ${PROJECT}
-```
-
-3. Install using Helm:
-
-```bash
-helm install my-quickstart ./chart --namespace ${PROJECT}
-```
-
-#### If your quickstart requires a model
-
-**Option A: Use your own model (MaaS - Model as a Service)**
-
-If you have an existing model endpoint, provide the model name, endpoint, and API key:
-```bash
-helm install my-quickstart ./chart --namespace ${PROJECT} \
+helm install quickstart ./chart --namespace ${PROJECT} \
+  --set model.api_key=YOUR_API_KEY \
   --set model.name=YOUR_MODEL_NAME \
   --set model.endpoint=YOUR_MODEL_ENDPOINT \
-  --set model.api_key=YOUR_API_KEY
+  --set clusterDomain=$(oc get ingresses.config/cluster -o jsonpath='{.spec.domain}')
 ```
 
-> **Note**: The `model.endpoint` should be the full URL including protocol and port if needed (e.g., `https://my-model.example.com` or `http://my-model:8080`).
+> **Note**: `model.endpoint` is the base URL **without** the `/v1` suffix (e.g. `https://my-maas-instance:443`). Leave `model.endpoint` empty to use OpenAI directly.
 
-**Option B: Deploy with a model included in the chart**
-
-If you don't provide any model configuration, the chart will deploy a default model on your cluster:
-```bash
-helm install my-quickstart ./chart --namespace ${PROJECT}
-```
-
-> **Note**: Option B requires a GPU available in your cluster for the LLM deployment. See [Minimum hardware requirements](#minimum-hardware-requirements) for details. You must add your own model InferenceService template under `chart/templates/` for this option to work.
+</details>
 
 #### Testing model access (before deploying)
 
-If you are bringing your own model (Option A), you can verify the endpoint is reachable **before** installing the chart:
+You can verify your endpoint is reachable **before** installing the chart:
 
 ```bash
 oc run test-model-access --rm -it --restart=Never \
@@ -277,160 +126,90 @@ oc run test-model-access --rm -it --restart=Never \
     "YOUR_MODEL_ENDPOINT/v1/chat/completions" && echo "" && echo "SUCCESS" || echo "FAILED"'
 ```
 
-Replace `YOUR_API_KEY`, `YOUR_MODEL_NAME`, and `YOUR_MODEL_ENDPOINT` with your actual values.
+The same check ships as a Helm test: `helm test quickstart --namespace atryum-quickstart` (runs when `model.endpoint` is set).
 
 ### Validating the deployment
 
-> **CONTRIBUTOR TODO: add validation steps**
->
-> Tell users how to verify the deployment was successful.
->
-> **Include:**
-> - Commands to check pod status
-> - How to access the application (routes, URLs)
-> - How to verify functionality (e.g., "run helm test")
-> - Expected output/behavior
->
-> **Example:**
->
-> 1. Check all pods are running:
->    ```bash
->    oc get pods -n ${PROJECT}
->    ```
->    
-> 2. Get the application URL:
->    ```bash
->    echo https://$(oc get route/my-app -n ${PROJECT} --template='{{.spec.host}}')
->    ```
->    
-> 3. Test the endpoint is responding:
->    ```bash
->    curl -s https://$(oc get route/my-app -n ${PROJECT} --template='{{.spec.host}}')/health
->    ```
->
-> If your quickstart uses a model, you can run the included Helm test:
-> ```bash
-> helm test my-quickstart --namespace ${PROJECT}
-> ```
->
-> If your quickstart does not use a model, remove the helm test step and add your own validation steps.
+1. Check all pods are running and the seed Job completed:
+```bash
+make status        # or: oc get pods,jobs,routes -n atryum-quickstart
+```
+Expected: `quickstart-atryum`, `quickstart-postgres`, and `quickstart-demos` pods `Running`; job `quickstart-configure` `Complete`.
+
+2. Get the URLs:
+```bash
+make urls
+```
+
+3. See what the seeding Job configured (servers, 6 agents + charters, 5 rules, judge):
+```bash
+make logs-configure
+```
+
+### Walkthrough
+
+1. Open the **demo dashboard** URL, pick the **AP / Treasury Disbursement Agent**, and run it.
+2. The agent tries to pay every pending invoice. Watch the stream span all four outcomes: reads are **auto-approved** by static rules; small payments to verified payees are **AI-approved** against the agent's charter; large payments are held for **human approval**; payments to sanctioned accounts are **denied**.
+3. Open the **Atryum UI** → **Invocations** to see every decision with its confidence and reasoning; approve or deny anything held for a human, then re-run the agent.
+4. **Rules** shows the seeded tiers; **Agents** shows each agent's charter — the plain-language constitution the judge enforces. Edit a charter and re-run to see decisions change.
+5. Try the GDPR demo at the dashboard's `/gdpr` path: erasure under legal hold gets denied, consent withdrawal sails through.
+6. `make configure` re-applies the original seed at any time (idempotent).
 
 ### Delete
 
-> **CONTRIBUTOR TODO: verify deletion steps**
->
-> Provide clear instructions to cleanly remove the deployment.
->
-> **Include:**
-> - Command to uninstall via Helm
-> - Any manual cleanup needed (secrets, PVCs, etc.)
-> - How to verify complete removal
->
-> Users should be able to return their environment to pre-deployment state.
->
-> **Example:**
->
-> To completely remove the deployment:
->
-> 1. Uninstall the Helm release:
->    ```bash
->    helm uninstall my-quickstart --namespace ${PROJECT}
->    ```
->
-> 2. (Optional) Delete the project:
->    ```bash
->    oc delete project ${PROJECT}
->    ```
+1. Uninstall the Helm release (keeps the namespace and the PostgreSQL PVC):
+```bash
+make uninstall
+```
+
+2. Delete the whole project including data:
+```bash
+make cleanup-namespace     # or: oc delete project atryum-quickstart
+```
 
 ## Repository structure
 
-> **CONTRIBUTOR TODO: update the file tree**
->
-> Show the organization of your repository so contributors understand where things are.
->
-> Update this to reflect your actual structure - add application code directories, additional config folders, etc.
->
-> Keep it concise - don't list every single file, just the important directories and key files.
-
 ```
 .
-├── chart/                    # Helm chart for deploying the quickstart
-│   ├── Chart.yaml            # Chart metadata
-│   ├── values.yaml           # Default configuration values (model info, resources, etc.)
-│   └── templates/            # Kubernetes resource templates
-│       ├── test-model-access.yaml  # Helm test for verifying model connectivity
-│       └── ...               # Add your templates here (deployments, services, etc.)
-├── docs/
-│   └── images/               # Architecture diagrams and screenshots
+├── Makefile                  # Entrypoint: make install / configure / status / uninstall
+├── .env.example              # MODEL_API_KEY, MODEL_NAME, MODEL_ENDPOINT
+├── quickstart.yaml           # Publication metadata
+├── chart/                    # Helm chart
+│   ├── Chart.yaml
+│   ├── values.yaml           # model.*, atryum, postgres, demo, configure
+│   ├── templates/            # Atryum, PostgreSQL, demo, Routes, seed Job, helm test
+│   └── files/
+│       ├── seed.json         # 6 agents + charters, MCP servers, rule tiers
+│       └── configure.py      # Idempotent seeding via Atryum's REST API
+├── docs/images/              # Architecture diagram
 └── README.md
 ```
 
-> **EXAMPLE:** If your quickstart includes application source code (e.g., a web UI, API server), add it as a sibling directory to chart/. For example:
-> ```
-> ├── my-app/                 # Application source code
-> │   ├── app.py
-> │   ├── Containerfile
-> │   └── requirements.txt
-> ```
+The demo agents' source lives in its own repository and ships as the [`validmind/atryum-finance-demo`](https://hub.docker.com/r/validmind/atryum-finance-demo) image.
 
 ## References
 
-> **CONTRIBUTOR TODO: add relevant links**
->
-> This section is RECOMMENDED but optional.
->
-> **Include links to:**
-> - Official documentation for technologies used
-> - Blog posts or articles about the use case
-> - Research papers or whitepapers
-> - Related quickstarts or examples
-> - Partner/vendor documentation
->
-> **Example:**
-> - [OpenShift AI Documentation](https://docs.redhat.com/en/openshift-ai)
-> - [LangChain Documentation](https://langchain.com/docs)
-> - [Blog: Building HIPAA-Compliant AI Applications](https://example.com/blog)
->
-> _Remove this section entirely if you have no references to add._
+- [Atryum documentation](https://atryum.org)
+- [Atryum source](https://github.com/validmind/atryum)
+- [Model Context Protocol (MCP)](https://modelcontextprotocol.io)
+- [ValidMind Agent Authority](https://validmind.com) — open-source Atryum deployed inside ValidMind, wired to the model/agent inventory, hierarchical charters, and evidence systems that make every decision audit-ready (not required by this quickstart)
 
 ## Technical details
 
-> **CONTRIBUTOR TODO: add technical deep dive**
->
-> This section is OPTIONAL.
->
-> **Use this for:**
-> - How the components work together technically
-> - Implementation details developers would want to know
-> - Model details (size, quantization, context window)
-> - API endpoints and integration points
-> - Performance characteristics
->
-> This is where technical depth goes - the earlier sections focus on the use case.
->
-> _Remove this section if not needed._
+- **Integration mode**: this quickstart uses Atryum as an **MCP proxy** — one of its three integration modes (MCP proxy, harness permission check, orchestration control). The demo agents connect to `/mcp/finance` and `/mcp/gdpr` with an `agent_id` that resolves their Atryum agent record; Atryum forwards `tools/list` transparently and intercepts every `tools/call`.
+- **Decision layers, as seeded** (first match wins): **static rules** auto-approve read-only tools in-process (~1 ms, no model call) → **AI evaluation** judges state-changing tools against the calling agent's charter, returning a decision with confidence and reasoning → a blanket **human approval** fallback holds anything unmatched. AI evaluation **fails closed** to human approval if the judge LLM is unreachable. A judge check runs alongside a multi-second agent reasoning turn, so the overhead is a fraction of a step the loop already pays for.
+- **Latency**: the vast majority of calls resolve on the static-rule path with no model call; only forwarded calls pay for the judge.
+- **Charters** come from a ValidMind AI-governance organization template (the same text a governed org would sync from ValidMind); here they're seeded directly onto Atryum agent records, so no ValidMind connection is needed.
+- **Seeding** is a Helm post-install/post-upgrade hook Job driving Atryum's REST API (`/api/v1/servers`, `/api/v1/agents`, `/api/v1/rules`, `/api/v1/llm-configs`) — idempotent, stdlib-Python only.
+- **Auth**: Atryum runs in no-auth quickstart mode (no `[[auth]]` blocks): its UI and operator API are unprotected behind the Route. Intentional for a demo cluster — add auth before exposing further.
+- **Images**: `validmind/atryum` (gateway) and `validmind/atryum-finance-demo` (dashboard :8000, mock MCP backends :8001); both run under OpenShift's arbitrary UIDs. PostgreSQL is `quay.io/sclorg/postgresql-16-c9s`.
 
 ## Tags
 
-> **CONTRIBUTOR TODO: add metadata and tags for publication**
->
-> Tags are REQUIRED for publication to redhat.com catalog.
->
-> **Fill in:**
-> - **Title:** (must match H1 heading, max 64 chars)
-> - **Description:** (must match short description, max 160 chars)
-> - **Industry:** ONE from the list in CONTRIBUTING.md (e.g., Healthcare, Retail, Financial Services)
-> - **Product:** Primary Red Hat product (e.g., OpenShift AI, OpenShift, RHEL)
-> - **Use case:** Optional descriptor (e.g., security, automation, productivity)
-> - **Partner:** Optional, list partners if applicable (e.g., NVIDIA, Intel)
-> - **Contributor org:** Defaults to "Red Hat" unless partner or community contribution
->
-> **Example:**
->
-> **Title:** Protect patient data with LLM guardrails  
-> **Description:** Deploy HIPAA-compliant AI assistants for healthcare with built-in data protection and audit logging  
-> **Industry:** Healthcare provider  
-> **Product:** OpenShift AI  
-> **Use case:** Security, compliance  
-> **Partner:** N/A  
-> **Contributor org:** Red Hat
+**Title:** Approve or block AI agent tool calls with Atryum
+**Description:** Put a governance gateway between AI agents and their tools: every action is approved, denied, or escalated against each agent's charter, with full audit.
+**Industry:** Financial Services
+**Product:** OpenShift
+**Use case:** Security, governance, compliance
+**Partner:** ValidMind
+**Contributor org:** ValidMind

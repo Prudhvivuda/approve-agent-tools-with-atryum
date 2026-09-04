@@ -1,0 +1,101 @@
+{{- if .Values.demo.enabled }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "quickstart.demo" . }}
+  labels:
+    app.kubernetes.io/name: {{ include "quickstart.demo" . }}
+    {{- include "quickstart.labels" . | nindent 4 }}
+spec:
+  selector:
+    app.kubernetes.io/name: {{ include "quickstart.demo" . }}
+  ports:
+    - name: dashboard
+      port: 8000
+      targetPort: dashboard
+    - name: mcp
+      port: 8001
+      targetPort: mcp
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "quickstart.demo" . }}
+  labels:
+    app.kubernetes.io/name: {{ include "quickstart.demo" . }}
+    app.kubernetes.io/component: demo
+    {{- include "quickstart.labels" . | nindent 4 }}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: {{ include "quickstart.demo" . }}
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: {{ include "quickstart.demo" . }}
+        app.kubernetes.io/component: demo
+        {{- include "quickstart.labels" . | nindent 8 }}
+    spec:
+      automountServiceAccountToken: false
+      securityContext:
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: demos
+          image: "{{ .Values.demo.image.repository }}:{{ .Values.demo.image.tag }}"
+          imagePullPolicy: {{ .Values.demo.image.pullPolicy }}
+          ports:
+            - name: dashboard
+              containerPort: 8000
+            - name: mcp
+              containerPort: 8001
+          env:
+            # The demo's agents call tools through Atryum's MCP proxy — that is
+            # the whole point of the quickstart.
+            - name: ATRYUM_BASE
+              value: "http://{{ include "quickstart.atryum" . }}:8080"
+            - name: FINANCE_RESET_URL
+              value: "http://127.0.0.1:8001/mcp/finance/reset"
+            - name: GDPR_RESET_URL
+              value: "http://127.0.0.1:8001/mcp/gdpr/reset"
+          envFrom:
+            - secretRef:
+                name: {{ .Release.Name }}-llm
+          readinessProbe:
+            httpGet:
+              path: /api/finance/agents
+              port: dashboard
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            timeoutSeconds: 2
+          resources:
+            {{- toYaml .Values.demo.resources | nindent 12 }}
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
+{{- if .Values.demo.route.enabled }}
+---
+apiVersion: route.openshift.io/v1
+kind: Route
+metadata:
+  name: {{ include "quickstart.demo" . }}
+  labels:
+    app.kubernetes.io/name: {{ include "quickstart.demo" . }}
+    {{- include "quickstart.labels" . | nindent 4 }}
+spec:
+  {{- with (include "quickstart.demoHost" .) }}
+  host: {{ . }}
+  {{- end }}
+  to:
+    kind: Service
+    name: {{ include "quickstart.demo" . }}
+  port:
+    targetPort: dashboard
+  tls:
+    termination: edge
+    insecureEdgeTerminationPolicy: Redirect
+{{- end }}
+{{- end }}

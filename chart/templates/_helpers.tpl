@@ -1,0 +1,77 @@
+{{/* Component names, derived from the release. */}}
+{{- define "quickstart.atryum" -}}{{ .Release.Name }}-atryum{{- end -}}
+{{- define "quickstart.postgres" -}}{{ .Release.Name }}-postgres{{- end -}}
+{{- define "quickstart.demo" -}}{{ .Release.Name }}-demos{{- end -}}
+
+{{/* Common labels */}}
+{{- define "quickstart.labels" -}}
+app.kubernetes.io/part-of: approve-agent-tools-with-atryum
+app.kubernetes.io/managed-by: {{ .Release.Service }}
+app.kubernetes.io/instance: {{ .Release.Name }}
+{{- end -}}
+
+{{/*
+Model endpoint, normalized: no trailing slash and no trailing /v1 (Atryum's
+judge and the chart's model-access test both append /v1/... themselves).
+Empty when using OpenAI directly.
+*/}}
+{{- define "quickstart.modelEndpoint" -}}
+{{- .Values.model.endpoint | trimSuffix "/" | trimSuffix "/v1" | trimSuffix "/" -}}
+{{- end -}}
+
+{{/* Judge provider: explicit override, else derived from the endpoint. */}}
+{{- define "quickstart.modelProvider" -}}
+{{- if .Values.model.provider -}}
+{{- .Values.model.provider -}}
+{{- else if (include "quickstart.modelEndpoint" .) -}}
+openai_compatible
+{{- else -}}
+openai
+{{- end -}}
+{{- end -}}
+
+{{/*
+Postgres password: reuse the existing secret's value across upgrades so the
+database keeps working; generate a fresh one on first install unless pinned
+via .Values.postgres.password.
+*/}}
+{{- define "quickstart.postgresPassword" -}}
+{{- if .Values.postgres.password -}}
+{{- .Values.postgres.password -}}
+{{- else -}}
+{{- $existing := lookup "v1" "Secret" .Release.Namespace (include "quickstart.postgres" .) -}}
+{{- if and $existing $existing.data -}}
+{{- index $existing.data "database-password" | b64dec -}}
+{{- else -}}
+{{- randAlphaNum 24 -}}
+{{- end -}}
+{{- end -}}
+{{- end -}}
+
+{{/* Route host for a component ("" lets OpenShift assign one). */}}
+{{- define "quickstart.atryumHost" -}}
+{{- if .Values.atryum.route.host -}}
+{{- .Values.atryum.route.host -}}
+{{- else if .Values.clusterDomain -}}
+{{- printf "%s-%s.%s" (include "quickstart.atryum" .) .Release.Namespace .Values.clusterDomain -}}
+{{- end -}}
+{{- end -}}
+
+{{- define "quickstart.demoHost" -}}
+{{- if .Values.demo.route.host -}}
+{{- .Values.demo.route.host -}}
+{{- else if .Values.clusterDomain -}}
+{{- printf "%s-%s.%s" (include "quickstart.demo" .) .Release.Namespace .Values.clusterDomain -}}
+{{- end -}}
+{{- end -}}
+
+{{/* Atryum's public base URL: explicit value > computed route host > in-cluster service. */}}
+{{- define "quickstart.atryumPublicURL" -}}
+{{- if .Values.atryum.publicBaseUrl -}}
+{{- .Values.atryum.publicBaseUrl -}}
+{{- else if (include "quickstart.atryumHost" .) -}}
+{{- printf "https://%s" (include "quickstart.atryumHost" .) -}}
+{{- else -}}
+{{- printf "http://%s:8080" (include "quickstart.atryum" .) -}}
+{{- end -}}
+{{- end -}}

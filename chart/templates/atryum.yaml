@@ -1,0 +1,134 @@
+apiVersion: v1
+kind: Secret
+metadata:
+  name: {{ include "quickstart.atryum" . }}-config
+  labels:
+    app.kubernetes.io/name: {{ include "quickstart.atryum" . }}
+    {{- include "quickstart.labels" . | nindent 4 }}
+type: Opaque
+stringData:
+  # Quickstart configuration: no-auth mode (no [[auth]] blocks — the UI and
+  # operator API are unprotected, do not expose beyond a demo cluster) and no
+  # ValidMind connection ([backend] base_url stays empty).
+  atryum.toml: |
+    [server]
+    listen_addr = ":8080"
+    public_base_url = "{{ include "quickstart.atryumPublicURL" . }}"
+    database_url = "postgresql://{{ .Values.postgres.user }}:{{ include "quickstart.postgresPassword" . }}@{{ include "quickstart.postgres" . }}:5432/{{ .Values.postgres.database }}?sslmode=disable"
+    log_level = "{{ .Values.atryum.logLevel }}"
+
+    [backend]
+    base_url = ""
+
+    [defaults]
+    request_timeout_seconds = 30
+
+    [api_key]
+    key = ""
+    secret = ""
+
+    [auth_debug]
+    skip_verify = false
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "quickstart.atryum" . }}
+  labels:
+    app.kubernetes.io/name: {{ include "quickstart.atryum" . }}
+    {{- include "quickstart.labels" . | nindent 4 }}
+spec:
+  selector:
+    app.kubernetes.io/name: {{ include "quickstart.atryum" . }}
+  ports:
+    - name: http
+      port: 8080
+      targetPort: http
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "quickstart.atryum" . }}
+  labels:
+    app.kubernetes.io/name: {{ include "quickstart.atryum" . }}
+    app.kubernetes.io/component: api
+    {{- include "quickstart.labels" . | nindent 4 }}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: {{ include "quickstart.atryum" . }}
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: {{ include "quickstart.atryum" . }}
+        app.kubernetes.io/component: api
+        {{- include "quickstart.labels" . | nindent 8 }}
+      annotations:
+        # Restart Atryum when its config changes.
+        checksum/config: {{ printf "%s|%s" (include "quickstart.atryumPublicURL" .) (include "quickstart.postgresPassword" .) | sha256sum }}
+    spec:
+      automountServiceAccountToken: false
+      securityContext:
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: atryum
+          image: "{{ .Values.atryum.image.repository }}:{{ .Values.atryum.image.tag }}"
+          imagePullPolicy: {{ .Values.atryum.image.pullPolicy }}
+          ports:
+            - name: http
+              containerPort: 8080
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            timeoutSeconds: 2
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            initialDelaySeconds: 30
+            periodSeconds: 20
+            timeoutSeconds: 2
+          resources:
+            {{- toYaml .Values.atryum.resources | nindent 12 }}
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
+          volumeMounts:
+            - name: atryum-config
+              mountPath: /app/atryum.toml
+              subPath: atryum.toml
+              readOnly: true
+      volumes:
+        - name: atryum-config
+          secret:
+            secretName: {{ include "quickstart.atryum" . }}-config
+            defaultMode: 0400
+{{- if .Values.atryum.route.enabled }}
+---
+apiVersion: route.openshift.io/v1
+kind: Route
+metadata:
+  name: {{ include "quickstart.atryum" . }}
+  labels:
+    app.kubernetes.io/name: {{ include "quickstart.atryum" . }}
+    {{- include "quickstart.labels" . | nindent 4 }}
+spec:
+  {{- with (include "quickstart.atryumHost" .) }}
+  host: {{ . }}
+  {{- end }}
+  to:
+    kind: Service
+    name: {{ include "quickstart.atryum" . }}
+  port:
+    targetPort: http
+  tls:
+    termination: edge
+    insecureEdgeTerminationPolicy: Redirect
+{{- end }}

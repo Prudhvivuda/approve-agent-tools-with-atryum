@@ -1,0 +1,77 @@
+{{- if .Values.configure.enabled }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ .Release.Name }}-configure
+  labels:
+    app.kubernetes.io/name: {{ .Release.Name }}-configure
+    {{- include "quickstart.labels" . | nindent 4 }}
+  annotations:
+    "helm.sh/hook": post-install,post-upgrade
+    "helm.sh/hook-weight": "-1"
+    "helm.sh/hook-delete-policy": before-hook-creation
+data:
+  configure.py: |
+{{ .Files.Get "files/configure.py" | indent 4 }}
+  seed.json: |
+{{ .Files.Get "files/seed.json" | indent 4 }}
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ .Release.Name }}-configure
+  labels:
+    app.kubernetes.io/name: {{ .Release.Name }}-configure
+    app.kubernetes.io/component: configure
+    {{- include "quickstart.labels" . | nindent 4 }}
+  annotations:
+    "helm.sh/hook": post-install,post-upgrade
+    "helm.sh/hook-weight": "0"
+    "helm.sh/hook-delete-policy": before-hook-creation
+spec:
+  backoffLimit: 4
+  activeDeadlineSeconds: 900
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: {{ .Release.Name }}-configure
+        {{- include "quickstart.labels" . | nindent 8 }}
+    spec:
+      restartPolicy: Never
+      automountServiceAccountToken: false
+      securityContext:
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: configure
+          image: {{ .Values.configure.image }}
+          command: ["python3", "/seed/configure.py"]
+          # Explicit env wins over envFrom: the judge (Atryum) appends /v1/...
+          # itself, so it gets the endpoint WITHOUT the /v1 the demo secret
+          # carries for the OpenAI SDK.
+          env:
+            - name: ATRYUM_URL
+              value: "http://{{ include "quickstart.atryum" . }}:8080"
+            - name: DEMO_MCP_BASE
+              value: "http://{{ include "quickstart.demo" . }}:8001"
+            - name: LLM_PROVIDER
+              value: {{ include "quickstart.modelProvider" . | quote }}
+            - name: LLM_BASE_URL
+              value: {{ include "quickstart.modelEndpoint" . | quote }}
+          envFrom:
+            - secretRef:
+                name: {{ .Release.Name }}-llm
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
+          volumeMounts:
+            - name: seed
+              mountPath: /seed
+              readOnly: true
+      volumes:
+        - name: seed
+          configMap:
+            name: {{ .Release.Name }}-configure
+{{- end }}
