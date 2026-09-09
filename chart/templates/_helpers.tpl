@@ -34,16 +34,23 @@ openai
 Postgres password: reuse the existing secret's value across upgrades so the
 database keeps working; generate a fresh one on first install unless pinned
 via .Values.postgres.password.
+
+The generated value is memoized in .Values for the duration of the render —
+randAlphaNum returns a DIFFERENT value on every call, and this helper is
+included from both the postgres Secret and Atryum's config; without the memo
+the two get different passwords and Atryum can never authenticate.
 */}}
 {{- define "quickstart.postgresPassword" -}}
 {{- if .Values.postgres.password -}}
 {{- .Values.postgres.password -}}
 {{- else -}}
 {{- $existing := lookup "v1" "Secret" .Release.Namespace (include "quickstart.postgres" .) -}}
-{{- if and $existing $existing.data -}}
+{{- if and $existing $existing.data (hasKey $existing.data "database-password") -}}
 {{- index $existing.data "database-password" | b64dec -}}
 {{- else -}}
-{{- randAlphaNum 24 -}}
+{{- $gen := get .Values "_generatedPostgresPassword" | default (randAlphaNum 24) -}}
+{{- $_ := set .Values "_generatedPostgresPassword" $gen -}}
+{{- $gen -}}
 {{- end -}}
 {{- end -}}
 {{- end -}}

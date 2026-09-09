@@ -15,7 +15,10 @@ DEMO_TAG     ?= latest
 
 # OpenShift apps wildcard domain, used to compute stable Route hosts and
 # Atryum's public_base_url. Auto-detected; override if detection fails.
-CLUSTER_DOMAIN ?= $(shell oc get ingresses.config/cluster -o jsonpath='{.spec.domain}' 2>/dev/null)
+# Deferred (?=) and only expanded by targets that talk to the cluster, so
+# offline targets (env-init, lint, …) never wait on oc; the request itself
+# is capped at 5s.
+CLUSTER_DOMAIN ?= $(shell oc get ingresses.config/cluster -o jsonpath='{.spec.domain}' --request-timeout=5s 2>/dev/null)
 
 # Source .env for helm/oc recipes (MODEL_API_KEY, MODEL_NAME, MODEL_ENDPOINT).
 define with_env
@@ -27,12 +30,14 @@ endef
 
 # The user-supplied LLM credential (OpenAI or compatible) drives both Atryum's
 # AI-evaluation judge and the demo agents.
-HELM_MODEL_SETS := \
+# Recursive (=), NOT :=, so CLUSTER_DOMAIN's oc call only runs when a target
+# actually expands these.
+HELM_MODEL_SETS = \
 	--set-string model.api_key="$${MODEL_API_KEY}" \
 	--set-string model.name="$${MODEL_NAME:-gpt-4o}" \
 	--set-string model.endpoint="$${MODEL_ENDPOINT}"
 
-HELM_SETS := \
+HELM_SETS = \
 	--set-string clusterDomain="$(CLUSTER_DOMAIN)" \
 	--set-string atryum.image.repository="$(ATRYUM_IMAGE)" \
 	--set-string atryum.image.tag="$(ATRYUM_TAG)" \
@@ -53,7 +58,7 @@ help: ## Show available targets
 	@echo "  RELEASE=$(RELEASE)"
 	@echo "  ATRYUM_IMAGE=$(ATRYUM_IMAGE):$(ATRYUM_TAG)"
 	@echo "  DEMO_IMAGE=$(DEMO_IMAGE):$(DEMO_TAG)"
-	@echo "  CLUSTER_DOMAIN=$(CLUSTER_DOMAIN)"
+	@echo "  CLUSTER_DOMAIN   (auto-detected from the cluster at install time; override if detection fails)"
 
 ##@ Setup
 
@@ -75,8 +80,9 @@ env-verify: env-check ## Fail if MODEL_API_KEY is missing or a placeholder
 	@echo ".env looks good."
 
 namespace: ## Create or select the OpenShift project
-	@oc get project "$(NAMESPACE)" >/dev/null 2>&1 || oc new-project "$(NAMESPACE)"
-	@oc project "$(NAMESPACE)"
+	@oc get project "$(NAMESPACE)" >/dev/null 2>&1 || oc new-project "$(NAMESPACE)" >/dev/null
+	@oc project "$(NAMESPACE)" >/dev/null
+	@echo "Using project $(NAMESPACE)"
 
 ##@ Install
 

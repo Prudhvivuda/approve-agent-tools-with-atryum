@@ -109,7 +109,9 @@ spec:
         - name: atryum-config
           secret:
             secretName: {{ include "quickstart.atryum" . }}-config
-            defaultMode: 0400
+            # 0440, not 0400: secret files are root-owned and OpenShift runs the
+            # container as a random UID in the root group — group-read required.
+            defaultMode: 0440
 {{- if .Values.atryum.route.enabled }}
 ---
 apiVersion: route.openshift.io/v1
