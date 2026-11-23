@@ -16,6 +16,7 @@ Put a governance gateway between AI agents and their tools: every action is appr
   - [Installation](#installation)
   - [Validating the deployment](#validating-the-deployment)
   - [Walkthrough](#walkthrough)
+  - [MLflow tracing](#mlflow-tracing)
   - [Delete](#delete)
 - [Repository structure](#repository-structure)
 - [References](#references)
@@ -154,6 +155,30 @@ make logs-configure
 4. **Rules** shows the seeded tiers; **Agents** shows each agent's charter — the plain-language constitution the judge enforces. Edit a charter and re-run to see decisions change.
 5. Try the GDPR demo at the dashboard's `/gdpr` path: erasure under legal hold gets denied, consent withdrawal sails through.
 6. `make configure` re-applies the original seed at any time (idempotent).
+
+### MLflow tracing
+
+After installing the quick start from this chart, enable MLflow on that Helm
+release:
+
+```bash
+NS=atryum-quickstart
+helm upgrade quickstart ./chart -n "$NS" --reuse-values --set mlflow.deploy=true
+oc rollout status -n "$NS" deployment/quickstart-mlflow
+oc port-forward -n "$NS" svc/quickstart-mlflow 5000:5000
+```
+
+Open `http://localhost:5000` and look for Atryum invocation and judge spans
+in the Default experiment. After running a demo, inspect the invocation span
+for `atryum.disposition`. The chart disables capture of judge prompt and
+completion text. The demo agents' own model calls require separate client
+instrumentation.
+
+The chart's MLflow service is private and stores traces in SQLite on a
+persistent volume. To export to an existing [MLflow OTLP endpoint](https://mlflow.org/docs/latest/genai/tracing/opentelemetry/ingest/),
+set `mlflow.tracesEndpoint` to its full `/v1/traces` URL and pass
+`mlflow.experimentId` in place of `mlflow.deploy=true`. The receiver must be
+reachable from the Atryum pod and accept its requests.
 
 ### Delete
 

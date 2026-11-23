@@ -82,3 +82,5 @@ the two get different passwords and Atryum can never authenticate.
 {{- printf "http://%s:8080" (include "quickstart.atryum" .) -}}
 {{- end -}}
 {{- end -}}
+
+{{- define "quickstart.mlflow" -}}{{ .Release.Name }}-mlflow{{- end -}}

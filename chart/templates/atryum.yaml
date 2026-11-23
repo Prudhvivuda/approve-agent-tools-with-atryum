@@ -29,6 +29,27 @@ stringData:
 
     [auth_debug]
     skip_verify = false
+    {{- if or .Values.mlflow.deploy .Values.mlflow.tracesEndpoint .Values.mlflow.experimentId }}
+
+    [otel]
+    enabled = true
+    capture_content = false
+
+    [[otel.exporters]]
+    name = "mlflow"
+    {{- if .Values.mlflow.deploy }}
+    endpoint = {{ printf "http://%s:5000/v1/traces" (include "quickstart.mlflow" .) | quote }}
+    {{- else }}
+    endpoint = {{ required "mlflow.tracesEndpoint must be the full MLflow OTLP traces URL" .Values.mlflow.tracesEndpoint | quote }}
+    {{- end }}
+
+    [otel.exporters.headers]
+    {{- if .Values.mlflow.deploy }}
+    "x-mlflow-experiment-id" = {{ .Values.mlflow.experimentId | default "0" | toString | quote }}
+    {{- else }}
+    "x-mlflow-experiment-id" = {{ required "mlflow.experimentId is required" .Values.mlflow.experimentId | toString | quote }}
+    {{- end }}
+    {{- end }}
 ---
 apiVersion: v1
 kind: Service
@@ -65,6 +86,9 @@ spec:
         app.kubernetes.io/component: api
         {{- include "quickstart.labels" . | nindent 8 }}
       annotations:
+        {{- if or .Values.mlflow.deploy .Values.mlflow.tracesEndpoint .Values.mlflow.experimentId }}
+        checksum/mlflow: {{ toJson .Values.mlflow | sha256sum }}
+        {{- end }}
         # Restart Atryum when its config changes.
         checksum/config: {{ printf "%s|%s" (include "quickstart.atryumPublicURL" .) (include "quickstart.postgresPassword" .) | sha256sum }}
     spec:
